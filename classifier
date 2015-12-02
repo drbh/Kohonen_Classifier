@@ -1,0 +1,52 @@
+# This function will classify a csv file that has column names of:
+# X KXY Kohonen - Income Level
+# The results will return true if the majority income level is >50K for that cluser
+classifyCluster <- function(){
+  data = read.csv(file.choose()) # Load in data  as .csv from SPSS output to make classifications
+  cat("Loaded Dataset \n")
+  library(dplyr) # Gonna need dplyr for piping and to simulate a pivot table
+  classified <- data %>%                                             # Start piping with the loaded in dataframe
+    mutate(High_Income = as.numeric(Income.Level ==  " >50K.")) %>%  # We change the Income to a binary
+    group_by(X.KXY.Kohonen) %>%                                      # Now we group by each box or cluster                
+    summarise(Total = n(),                                           # We get Total count 
+              High = sum(High_Income),                               # Above 50K count (High)
+              Low = (Total-sum(High_Income)),                        # Below 50K (Low)
+              Grt_50K = ifelse(High > Low," >50K.", " <=50K."))      # Last we add a variable for classifying cluster above or below 50K
+  cat("Successfully Classified Kohonen Net Results \n")
+  return(classified)
+}
+# This funtion will take in the saved classification dataframe and 
+# apply it to any table with an X.KXY.Kohonen column
+applyClassification <- function(classifications){
+  data = read.csv(file.choose()) # Load in data  as .csv from SPSS output to classify
+  to_label_data <- data #[c("X.KXY.Kohonen")]
+  classifications <- classifications[c('X.KXY.Kohonen','Grt_50K')]
+  cat("Remove variables besides X.KXY.Kohonen \n")
+  labeled_data <- left_join(to_label_data,classifications,by = 'X.KXY.Kohonen')
+  cat("Successfully Labeled Data with Kohonen Classifications")
+  return(labeled_data)
+}
+
+getAccuracy <- function(labeled){
+  left_join(
+    labeled %>% group_by(Actual = Income.Level,Predicted = Grt_50K) %>% summarise(Number=n()),
+    labeled %>% group_by(Actual = Income.Level) %>% summarise(Total=n()),
+    by = "Actual"
+    ) %>% group_by(Actual,Predicted) %>% summarise(Number,Total,Accuracy = (Number/Total))
+}
+
+
+# This will run first function and save classifications
+classifications <- classifyCluster()
+# Run defined functions and save results to dataframe
+labeled <- applyClassification(classifications)
+# Print our the top of the data
+head(labeled)
+# Save out Confusion Matrix
+Confusion_Matrix <- getAccuracy(labeled) 
+# Print Confusion Matrix
+Confusion_Matrix
+# Add a column if the matrix 
+Confusion_Matrix$Good <- Confusion_Matrix$Actual == Confusion_Matrix$Predicted 
+# Get Overall Accuracy
+Confusion_Matrix %>% group_by(Good) %>% summarise(Results=sum(Number),Over=sum(Total), Accuracy = Results/Over)
